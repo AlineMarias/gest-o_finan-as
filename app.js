@@ -1,32 +1,15 @@
 const express = require('express');
 const app = express();
 const path = require('path');
-const mysql = require('mysql2');
+const db = require('./models/bccd.js'); 
 const buscarRouter = require('./routes/buscar');
 
 require('dotenv').config();
-
-const connection = mysql.createConnection({
-    host: process.env.BCDD_HOST,
-    user: process.env.BCDD_USER,
-    port: process.env.BCDD_PORT,
-    password: process.env.BCDD_PASSWORD,
-    database: process.env.BCDD_DATABASE
-});
-
-connection.connect(err => {
-    if (err) {
-        console.error('Erro ao conectar ao banco de dados:', err);
-        return;
-    }
-    console.log('Conexão bem-sucedida ao banco de dados');
-});
 
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
-
 
 app.get('/', (req, res) => {
   res.render('login');
@@ -37,22 +20,46 @@ app.get('/registrar', (req, res) => {
 });
 
 app.post('/registrar', (req, res) => {
-  const { email, password } = req.body;
+    const { fullName, username, cpf, birthdate, gender, email, phone, password } = req.body;
 
-  if (isValid(email, password)) {
-   
-    res.redirect('/menu');
-  } else {
- 
-    res.redirect('/login');
-  }
+    if (!fullName || !username || !cpf || !birthdate || !gender || !email || !phone || !password) {
+        res.status(400).send('Todos os campos são obrigatórios');
+        return;
+    }
 
+    const query = 'INSERT INTO usuarios (nome_completo, username, cpf, data_nascimento, genero, email, telefone, senha) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+    const params = [fullName, username, cpf, birthdate, gender, email, phone, password];
+
+    db.executeQuery(query, params)
+        .then(() => {
+            res.redirect('/menu');
+        })
+        .catch((err) => {
+            console.error('Erro ao inserir dados no banco de dados:', err);
+            res.status(500).send('Erro ao inserir dados no banco de dados');
+        });
 });
 
 app.get('/login', (req, res) => {
-  res.render('login');
+  const error = req.query.error || null;
+  res.render('login', { error });
 });
 
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  db.getUserByUsername(username)
+    .then(user => {
+      if (!user || user.password !== password) {
+        res.redirect('/login?error=Credenciais inválidas');
+      } else {
+        res.redirect('/menu');
+      }
+    })
+    .catch(err => {
+      console.error('Erro ao consultar o banco de dados:', err);
+      res.status(500).send('Erro interno do servidor');
+    });
+});
 
 app.use('/buscar', buscarRouter);
 
